@@ -1,0 +1,170 @@
+---
+title: "Data analysis"
+author: "Bernardo"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+
+## EDA
+
+```{r message=FALSE, warning=FALSE}
+library(readr)
+exhibit_10_clean <- read_csv("data/exhibit_10_clean.csv")
+```
+
+ 
+# Recommendations
+
+## Number of units to order 1
+
+Using the sample data in Exhibit 10, make a recommendation for how many units of each style
+Wally Obermeyer should order during the initial phase of production. Assume that there is no
+minimum order size requirement, and that Obermeyer’s initial production commitment must be
+at least 10,000 units. Assume that an initial order of 10,000 units leaves sufficient capacity for
+the second order.
+
+Assuming the demand distribution of each Parka to be a normal distribution with mean equal to the mean of forecasts, and the standard deviation being 2 times the individual forecasts standard deviations, we can use a Monte Carlo method to simulate the expected times the demand is not met, and with a confidence interval, and we use this to propose an initial order value
+
+Let the true distribution of demand for each Parka be $D \sim \mathcal{N}(\mu, \sigma^2)$, we don't know the true value of $\mu$. We have an estimator $\hat{D} \sim \mathcal{N}(\hat{\mu}, \hat{\sigma}^2)$ given by the individual forecasts of several heads of departments. So we say that, what we want to accomplish is to find, for each Parka, the amount to order so that the order value is below the expected value. If the distribution of D is indeed normal, we know that:
+
+$$E[D] = \mu$$
+
+Ideally, we would order exactly the expected amount plus some margin for error. Therefore, we can model the order amount as:
+
+$$h(X) \rightarrow o_p = D_p + m_p$$
+The Monte Carlo method gives us that:
+
+$$\hat{h_n} = \frac{1}{n}\sum^n_{j=1}h(x_j) \rightarrow \int_xh(x)f(x)dx = E_f[h(X)]$$
+Hence, we will create a distribution to approximate the random variable D. In that way, we can formulate the problem as an optimization problem, such that:
+
+$$min\ c$$
+**Subject to**
+$$\sum_{p=1}^ko_p \le 10000$$
+$$o_p > 0$$
+$$o_p - D_p - m_p \le c$$
+$$c \in [0,1]$$
+
+```{r}
+# Let the function be for the Gail Parka:
+mu <- 2*508.33
+dist <- rnorm(10000, mean = mu, sd = 388.1580434)
+profit_over <- 8.8
+profit_under <- 26.4
+price <- 110
+f <- function(q, dist, price) 
+   mean(pmin(dist,q)*price) - mean(pmax((q-dist),0))*price*.08
+q <- optimise(f, c(0,5000), dist = rnorm(10000, mean = 508.33, sd = 388.1580434), price=price, maximum = TRUE)
+```
+
+```{r}
+
+set.seed(123)  # for reproducibility
+
+data <- data.frame(exhibit_10_clean)
+
+# Function to optimize
+f <- function(q, dist, price) {
+  mean(pmin(dist, q) * price * 1.24) - mean(pmax((q - dist), 0)) * price * 0.08
+}
+
+# Initialize an empty list to store results
+results_list <- list()
+
+# Loop through each row
+for (i in 1:nrow(data)) {
+  mu_row <- data$mean[i]
+  sd_row <- data$std.2[i]
+  price_row <- data$Price[i]
+  
+  # Optimize q for the current row
+  q_opt <- optimise(f, c(0,5000), dist = rnorm(10000, mean = mu_row, sd = sd_row), 
+                    price=price_row, maximum = TRUE)
+  
+  # Store the result in the list
+  results_list[[i]] <- round(q_opt$maximum/2,0)
+}
+
+# Add the results to the dataframe
+data$q_optimized <- unlist(results_list)
+```
+
+```{r}
+# Let the function be for the Gail Parka:
+mu <- 2*508.33
+dist <- rnorm(10000, mean = mu, sd = 388.1580434)
+profit_over <- 8.8
+profit_under <- 26.4
+price <- 110
+f <- function(q, dist, price) 
+   mean(pmin(dist,q)*price) - mean(pmax((q-dist),0))*price*.08
+q <- optimise(f, c(0,5000), dist = rnorm(10000, mean = 508.33, sd = 388.1580434), price=price, maximum = TRUE)
+```
+
+```{r}
+
+set.seed(123)  # for reproducibility
+
+data <- data.frame(exhibit_10_clean)
+
+# Function to optimize
+f <- function(q, dist, price) {
+  #Selling only the true demand
+  sum(dist[dist<q])*price * 1.24
+  #Paying for overstocking
+  - sum(dist[dist>q])*110*0.08
+  #Selling only what we provisioned in the case of understocking
+  +sum(dist>q)*q*price * 1.24
+}
+
+# Initialize an empty list to store results
+results_list <- list()
+
+# Loop through each row
+for (i in 1:nrow(data)) {
+  mu_row <- data$mean[i]
+  sd_row <- data$std.2[i]
+  price_row <- data$Price[i]
+  
+  # Optimize q for the current row
+  q_opt <- optimise(f, c(0,5000), dist = rnorm(10000, mean = mu_row, sd = sd_row), 
+                    price=price_row, maximum = TRUE)
+  
+  # Store the result in the list
+  results_list[[i]] <- round(q_opt$maximum/2,0)
+}
+
+# Add the results to the dataframe
+data$q_optimized2 <- unlist(results_list)
+```
+
+## Number of units to order 2
+Using the sample data in Exhibit 10, make a recommendation for how many units of each style
+Wally Obermeyer should order during the initial phase of production. Assume that all ten styles
+in the sample problem are made in Hong Kong (a minimum commitment of 600 units per style
+ordered), and that Obermeyer’s initial production commitment must be at least 10,000 units.
+Ignore price differences among styles in your initial analysis. Clearly spell out the methodology
+you have used to make your ordering decisions, and the logic behind your methodology
+
+## What-if 1: All production from China
+Repeat your analysis, now assuming that all styles are made in China. What differences (if any)
+result?
+
+## Recommended operational changes:
+What operational changes would you recommend to Wally to improve performance? Clearly list
+the expected benefits from each change. Please try and be very specific in terms of the changes
+and benefits in response to this question
+
+### Change 1: (...)
+### Change 2: (...)
+
+## Decision making process on sourcing
+How should Obermeyer management think (both short term and long term) about sourcing in
+Hong Kong versus China? What sourcing policy would you recommend?
+
